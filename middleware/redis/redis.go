@@ -134,15 +134,18 @@ func (s *Store) Claim(ctx context.Context, key string) (*middleware.IdempotencyR
 		return nil, fmt.Errorf("spark/middleware/redis: encode inflight marker: %w", err)
 	}
 
-	prior, err := s.client.SetArgs(ctx, s.prefix+key, inflight, goredis.SetArgs{
+	setArgs := goredis.SetArgs{
 		Mode: "NX",
 		Get:  true,
 		TTL:  s.inflightTTL,
-	}).Result()
+	}
+
+	prior, err := s.client.SetArgs(ctx, s.prefix+key, inflight, setArgs).Result()
 	if err != nil {
 		if errors.Is(err, goredis.Nil) {
 			return nil, nil
 		}
+
 		return nil, fmt.Errorf("spark/middleware/redis: claim: %w", err)
 	}
 
@@ -150,11 +153,12 @@ func (s *Store) Claim(ctx context.Context, key string) (*middleware.IdempotencyR
 	if err := json.Unmarshal([]byte(prior), &e); err != nil {
 		return nil, fmt.Errorf("spark/middleware/redis: decode entry: %w", err)
 	}
+
 	if e.Status == statusInflight {
 		if e.Nonce == nonce {
 			return nil, nil
 		}
-		return nil, middleware.ErrIdempotencyInFlight
+		return nil, middleware.ErrCommandInFlight
 	}
 
 	out := &middleware.IdempotencyResult{Hash: e.Hash}

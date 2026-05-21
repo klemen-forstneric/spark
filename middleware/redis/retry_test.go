@@ -61,7 +61,7 @@ func TestClaimRetryWithSameNonceIsAcquired(t *testing.T) {
 
 // TestClaimDifferentNonceIsConflict confirms the genuine in-flight path
 // still works: two distinct dispatchers will pick different nonces, and
-// the second must see ErrIdempotencyInFlight.
+// the second must see ErrCommandInFlight.
 func TestClaimDifferentNonceIsConflict(t *testing.T) {
 	store := newStoreWithNonce(t, "nonce-A", "nonce-B")
 	ctx := context.Background()
@@ -70,7 +70,7 @@ func TestClaimDifferentNonceIsConflict(t *testing.T) {
 		t.Fatalf("first Claim: %v", err)
 	}
 	_, err := store.Claim(ctx, "k")
-	if !errors.Is(err, middleware.ErrIdempotencyInFlight) {
-		t.Fatalf("expected ErrIdempotencyInFlight on distinct nonce, got %v", err)
+	if !errors.Is(err, middleware.ErrCommandInFlight) {
+		t.Fatalf("expected ErrCommandInFlight on distinct nonce, got %v", err)
 	}
 }

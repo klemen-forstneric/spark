@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"log/slog"
 
 	"github.com/klemen-forstneric/spark"
 )
@@ -28,7 +27,7 @@ type IdempotencyStore interface {
 	// non-nil if a completed entry already exists, in which case the caller
 	// must return the cached result without invoking the handler. A nil
 	// pointer with a nil error means the caller has claimed the key and
-	// should proceed. ErrIdempotencyInFlight is returned when another
+	// should proceed. ErrCommandInFlight is returned when another
 	// in-flight dispatch already holds the claim.
 	Claim(ctx context.Context, key string) (prior *IdempotencyResult, err error)
 
@@ -63,10 +62,10 @@ func (JSONHasher) Hash(cmd spark.Command) (uint64, error) {
 }
 
 var (
-	// ErrIdempotencyInFlight is returned when a concurrent dispatch for the
+	// ErrCommandInFlight is returned when a concurrent dispatch for the
 	// same idempotency key is already running. Callers may retry after a
 	// short backoff to read the cached result.
-	ErrIdempotencyInFlight = errors.New("spark/middleware: command with this idempotency key is already in flight")
+	ErrCommandInFlight = errors.New("spark/middleware: command with this idempotency key is already in flight")
 
 	// ErrMissingIdempotencyKey is returned (only when IdempotencyConfig.RequireKey is set) if
 	// no idempotency key is present on the context or command.
@@ -85,9 +84,9 @@ type IdempotencyConfig struct {
 	Store IdempotencyStore
 
 	// Logger reports store failures (failed Save/Release, orphan claim
-	// cleanup after panic) at Warn level. Defaults to slog.Default() if
-	// nil. Pass a logger backed by io.Discard to silence.
-	Logger *slog.Logger
+	// cleanup after panic) at Warn level. Defaults to spark.NopLogger if
+	// nil.
+	Logger spark.LoggerCtx
 
 	// Codec wraps result values for cross-process stores. Nil leaves
 	// results as opaque Go values, which only works for in-memory stores —
@@ -127,7 +126,7 @@ func Idempotent(cfg IdempotencyConfig) spark.Middleware {
 		panic("spark/middleware: IdempotencyConfig.Store is required")
 	}
 	if cfg.Logger == nil {
-		cfg.Logger = slog.Default()
+		cfg.Logger = spark.NopLogger
 	}
 
 	return func(next spark.Next) spark.Next {
@@ -174,7 +173,7 @@ func Idempotent(cfg IdempotencyConfig) spark.Middleware {
 					return
 				}
 				if relErr := cfg.Store.Release(context.WithoutCancel(ctx), key); relErr != nil {
-					cfg.Logger.WarnContext(ctx, "spark/middleware: failed to release orphan idempotency claim",
+					cfg.Logger.Warn(ctx, "spark/middleware: failed to release orphan idempotency claim",
 						"key", key, "command", cmd.Type(), "error", relErr.Error())
 				}
 			}()
@@ -191,7 +190,7 @@ func Idempotent(cfg IdempotencyConfig) spark.Middleware {
 
 			if err != nil && cfg.CacheSuccessOnly {
 				if relErr := cfg.Store.Release(writeCtx, key); relErr != nil {
-					cfg.Logger.WarnContext(ctx, "spark/middleware: failed to release idempotency claim",
+					cfg.Logger.Warn(ctx, "spark/middleware: failed to release idempotency claim",
 						"key", key, "command", cmd.Type(), "error", relErr.Error())
 				}
 				return result, err
@@ -199,16 +198,16 @@ func Idempotent(cfg IdempotencyConfig) spark.Middleware {
 
 			stored, wrapErr := wrap(cfg.Codec, result)
 			if wrapErr != nil {
-				cfg.Logger.WarnContext(ctx, "spark/middleware: failed to encode result for caching",
+				cfg.Logger.Warn(ctx, "spark/middleware: failed to encode result for caching",
 					"key", key, "command", cmd.Type(), "error", wrapErr.Error())
 				if relErr := cfg.Store.Release(writeCtx, key); relErr != nil {
-					cfg.Logger.WarnContext(ctx, "spark/middleware: failed to release idempotency claim after encode failure",
+					cfg.Logger.Warn(ctx, "spark/middleware: failed to release idempotency claim after encode failure",
 						"key", key, "command", cmd.Type(), "error", relErr.Error())
 				}
 				return result, err
 			}
 			if saveErr := cfg.Store.Save(writeCtx, key, IdempotencyResult{Result: stored, Err: err, Hash: hash}); saveErr != nil {
-				cfg.Logger.WarnContext(ctx, "spark/middleware: failed to save idempotency result",
+				cfg.Logger.Warn(ctx, "spark/middleware: failed to save idempotency result",
 					"key", key, "command", cmd.Type(), "error", saveErr.Error())
 			}
 			return result, err

@@ -2,16 +2,15 @@ package middleware
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/klemen-forstneric/spark"
 )
 
 // Log returns a middleware that logs every command dispatch via logger.
-// Successful dispatches log at Info; failures log at Error. Each log line
-// includes the command name and elapsed duration.
-func Log(logger *slog.Logger) spark.Middleware {
+// Successful dispatches log at Info; failures log at Error and pass the
+// error as the positional err argument.
+func Log(log spark.LoggerCtx) spark.Middleware {
 	return func(next spark.Next) spark.Next {
 		return func(ctx context.Context, cmd spark.Command) (any, error) {
 			start := time.Now()
@@ -19,15 +18,14 @@ func Log(logger *slog.Logger) spark.Middleware {
 			dur := time.Since(start)
 
 			if err != nil {
-				logger.LogAttrs(ctx, slog.LevelError, "spark: command failed",
-					slog.String("command", cmd.Type()),
-					slog.Duration("duration", dur),
-					slog.String("error", err.Error()),
+				log.Error(ctx, "spark: command failed", err,
+					"command", cmd.Type(),
+					"duration", dur,
 				)
 			} else {
-				logger.LogAttrs(ctx, slog.LevelInfo, "spark: command handled",
-					slog.String("command", cmd.Type()),
-					slog.Duration("duration", dur),
+				log.Info(ctx, "spark: command handled",
+					"command", cmd.Type(),
+					"duration", dur,
 				)
 			}
 			return result, err

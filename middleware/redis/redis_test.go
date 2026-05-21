@@ -43,8 +43,8 @@ func TestClaimInflight(t *testing.T) {
 		t.Fatalf("first claim: %v", err)
 	}
 	prior, err := store.Claim(ctx, "k")
-	if !errors.Is(err, middleware.ErrIdempotencyInFlight) {
-		t.Fatalf("expected ErrIdempotencyInFlight, got prior=%+v err=%v", prior, err)
+	if !errors.Is(err, middleware.ErrCommandInFlight) {
+		t.Fatalf("expected ErrCommandInFlight, got prior=%+v err=%v", prior, err)
 	}
 }
 

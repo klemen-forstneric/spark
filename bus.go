@@ -76,8 +76,7 @@ func (b *Bus) registerFunc(fn reflect.Value) error {
 	}
 	cmdT, ok := matchesHandlerSig(fn.Type())
 	if !ok {
-		return fmt.Errorf("%w: %s does not match func(context.Context, Command) (R, error)",
-			ErrInvalidHandler, fn.Type())
+		return fmt.Errorf("%w: %s does not match the handler shape", ErrInvalidHandler, fn.Type())
 	}
 
 	b.mu.Lock()

@@ -34,7 +34,7 @@ func (s *fakeStore) Claim(_ context.Context, key string) (*middleware.Idempotenc
 		return &r, nil
 	}
 	if s.inflight[key] {
-		return nil, middleware.ErrIdempotencyInFlight
+		return nil, middleware.ErrCommandInFlight
 	}
 	s.inflight[key] = true
 	return nil, nil
