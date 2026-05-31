@@ -51,10 +51,13 @@ var (
 // Pass a pointer (Register(&svc)) to pick up both value- and
 // pointer-receiver methods.
 //
-// Commands may be value or pointer types: handlers are keyed by whatever
-// type the handler declares as its command argument. If a handler takes
-// *CreateUser, callers must Dispatch &CreateUser{...} — and vice versa.
-// CreateUser and *CreateUser are independent registrations.
+// Commands may be value or pointer types, and the two forms are
+// interchangeable: a command is keyed by its underlying (element) type, so a
+// handler declared for CreateUser also serves Dispatch(&CreateUser{...}) and
+// one declared for *CreateUser also serves Dispatch(CreateUser{...}). The bus
+// adapts the argument to whatever kind the handler declares. Consequently,
+// registering separate handlers for CreateUser and *CreateUser is a conflict
+// (ErrAlreadyRegistered), not two independent registrations.
 func (b *Bus) Register(h any) error {
 	if h == nil {
 		return fmt.Errorf("%w: nil handler", ErrInvalidHandler)
@@ -80,13 +83,14 @@ func (b *Bus) registerFunc(fn reflect.Value) error {
 	if !ok {
 		return fmt.Errorf("%w: %s does not match the handler shape", ErrInvalidHandler, fn.Type())
 	}
+	key := commandKey(cmdT)
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, exists := b.handlers[cmdT]; exists {
-		return fmt.Errorf("%w: %s", ErrAlreadyRegistered, cmdT)
+	if _, exists := b.handlers[key]; exists {
+		return fmt.Errorf("%w: %s", ErrAlreadyRegistered, key)
 	}
-	b.handlers[cmdT] = b.wrapReflected(fn)
+	b.handlers[key] = b.wrapReflected(fn)
 	return nil
 }
 
@@ -106,12 +110,12 @@ func (b *Bus) registerMethods(hv reflect.Value) error {
 		if !ok {
 			continue
 		}
-		if seen[cmdT] {
-			return fmt.Errorf("%w: %s has two methods handling %s",
-				ErrAlreadyRegistered, ht, cmdT)
+		key := commandKey(cmdT)
+		if seen[key] {
+			return fmt.Errorf("%w: %s has two methods handling %s", ErrAlreadyRegistered, ht, key)
 		}
-		seen[cmdT] = true
-		matched = append(matched, pending{cmdType: cmdT, method: mv})
+		seen[key] = true
+		matched = append(matched, pending{cmdType: key, method: mv})
 	}
 
 	if len(matched) == 0 {
@@ -164,6 +168,16 @@ func matchesHandlerSig(mt reflect.Type) (reflect.Type, bool) {
 	return mt.In(1), true
 }
 
+// commandKey normalizes a command type to its canonical map key. The pointer
+// and value forms of a command collapse to the same key (the element type),
+// so a handler registered for one form serves dispatches of the other.
+func commandKey(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Ptr {
+		return t.Elem()
+	}
+	return t
+}
+
 // Dispatch sends cmd to its registered handler and returns the handler's
 // result as an opaque any. The caller asserts to the concrete result type.
 //
@@ -174,7 +188,11 @@ func matchesHandlerSig(mt reflect.Type) (reflect.Type, bool) {
 // Returns ErrHandlerNotFound if no handler is registered for cmd's runtime
 // type.
 func (b *Bus) Dispatch(ctx context.Context, cmd Command) (any, error) {
-	cmdType := reflect.TypeOf(cmd)
+	t := reflect.TypeOf(cmd)
+	if t == nil {
+		return nil, fmt.Errorf("%w: <nil>", ErrHandlerNotFound)
+	}
+	cmdType := commandKey(t)
 
 	b.mu.RLock()
 	fn, ok := b.handlers[cmdType]
@@ -190,11 +208,13 @@ func (b *Bus) Dispatch(ctx context.Context, cmd Command) (any, error) {
 // or a func value), with the bus's middleware chain baked in
 // (outermost first).
 func (b *Bus) wrapReflected(callable reflect.Value) Next {
-	hasResult := callable.Type().NumOut() == 2
+	ct := callable.Type()
+	hasResult := ct.NumOut() == 2
+	wantType := ct.In(1)
 	inner := Next(func(ctx context.Context, cmd Command) (any, error) {
 		out := callable.Call([]reflect.Value{
 			reflect.ValueOf(ctx),
-			reflect.ValueOf(cmd),
+			coerceCommand(reflect.ValueOf(cmd), wantType),
 		})
 		errVal := out[len(out)-1]
 		var err error
@@ -207,6 +227,23 @@ func (b *Bus) wrapReflected(callable reflect.Value) Next {
 		return out[0].Interface(), err
 	})
 	return b.applyMiddleware(inner)
+}
+
+// coerceCommand adapts a dispatched command value to the kind (value or
+// pointer) the handler declares, so pointer and value forms are
+// interchangeable at the dispatch boundary. When the handler wants a pointer
+// but a value was dispatched, it operates on an addressable copy; when it
+// wants a value but a pointer was dispatched, the pointer is dereferenced.
+func coerceCommand(arg reflect.Value, want reflect.Type) reflect.Value {
+	if arg.Type() == want {
+		return arg
+	}
+	if want.Kind() == reflect.Ptr {
+		p := reflect.New(arg.Type())
+		p.Elem().Set(arg)
+		return p
+	}
+	return arg.Elem()
 }
 
 func (b *Bus) applyMiddleware(inner Next) Next {

@@ -480,3 +480,61 @@ func TestPointerCommand(t *testing.T) {
 		t.Fatalf("handler not invoked: %v", svc.seen)
 	}
 }
+
+// TestPointerValueInterchangeable verifies that the pointer and value forms of
+// a command resolve to the same handler regardless of which kind the handler
+// declares or the caller dispatches.
+func TestPointerValueInterchangeable(t *testing.T) {
+	t.Run("value handler, pointer dispatch", func(t *testing.T) {
+		bus := spark.NewBus()
+		var got string
+		err := bus.Register(func(_ context.Context, c CreateUser) (*User, error) {
+			got = c.Email
+			return &User{Email: c.Email}, nil
+		})
+		if err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		if _, err := bus.Dispatch(context.Background(), &CreateUser{Email: "a@b.c"}); err != nil {
+			t.Fatalf("Dispatch pointer: %v", err)
+		}
+		if got != "a@b.c" {
+			t.Fatalf("handler not invoked, got %q", got)
+		}
+	})
+
+	t.Run("pointer handler, value dispatch", func(t *testing.T) {
+		bus := spark.NewBus()
+		var got string
+		err := bus.Register(func(_ context.Context, c *CreateUser) (*User, error) {
+			got = c.Email
+			return &User{Email: c.Email}, nil
+		})
+		if err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		if _, err := bus.Dispatch(context.Background(), CreateUser{Email: "x@y.z"}); err != nil {
+			t.Fatalf("Dispatch value: %v", err)
+		}
+		if got != "x@y.z" {
+			t.Fatalf("handler not invoked, got %q", got)
+		}
+	})
+}
+
+// TestPointerValueConflict verifies that registering both forms of the same
+// command is a conflict rather than two independent registrations.
+func TestPointerValueConflict(t *testing.T) {
+	bus := spark.NewBus()
+	if err := bus.Register(func(_ context.Context, _ CreateUser) (*User, error) {
+		return nil, nil
+	}); err != nil {
+		t.Fatalf("first Register: %v", err)
+	}
+	err := bus.Register(func(_ context.Context, _ *CreateUser) (*User, error) {
+		return nil, nil
+	})
+	if !errors.Is(err, spark.ErrAlreadyRegistered) {
+		t.Fatalf("expected ErrAlreadyRegistered, got %v", err)
+	}
+}
