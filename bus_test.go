@@ -91,9 +91,9 @@ func (s *userService) Create(_ context.Context, cmd CreateUser) (*User, error) {
 	return &User{ID: "u1", Email: cmd.Email}, nil
 }
 
-func (s *userService) Delete(_ context.Context, cmd DeleteUser) (spark.Empty, error) {
+func (s *userService) Delete(_ context.Context, cmd DeleteUser) error {
 	s.deleted = append(s.deleted, cmd.ID)
-	return spark.Empty{}, nil
+	return nil
 }
 
 // Healthcheck is exported but has a non-matching signature; the structural
@@ -261,12 +261,12 @@ type Flaky struct {
 
 func (Flaky) Type() string { return "flaky" }
 
-func (s *flakyService) Run(_ context.Context, _ Flaky) (spark.Empty, error) {
+func (s *flakyService) Run(_ context.Context, _ Flaky) error {
 	s.attempts++
 	if s.attempts < 3 {
-		return spark.Empty{}, errors.New("transient")
+		return errors.New("transient")
 	}
-	return spark.Empty{}, nil
+	return nil
 }
 
 func TestRetry(t *testing.T) {
@@ -291,7 +291,7 @@ type Boom struct {
 
 func (Boom) Type() string { return "boom" }
 
-func (panicker) Handle(_ context.Context, _ Boom) (spark.Empty, error) {
+func (panicker) Handle(_ context.Context, _ Boom) error {
 	panic("oops")
 }
 

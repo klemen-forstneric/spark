@@ -34,8 +34,10 @@ var (
 
 // Register installs handlers on the bus. h may be either:
 //
-//   - A function value with signature func(context.Context, C) (R, error)
-//     where C implements Command — registered as the sole handler for C.
+//   - A function value with signature func(context.Context, C) (R, error),
+//     or func(context.Context, C) error for handlers with no result, where C
+//     implements Command — registered as the sole handler for C. The
+//     result-less form dispatches as an Empty result.
 //
 //   - A struct (or pointer to one); each exported method matching the same
 //     signature is registered as a handler for its command type. Method
@@ -130,11 +132,15 @@ func (b *Bus) registerMethods(hv reflect.Value) error {
 	return nil
 }
 
-// matchesHandlerSig reports whether mt is the signature
-// func(context.Context, C) (R, error) for some C implementing Command, and
-// returns C if so.
+// matchesHandlerSig reports whether mt is one of the handler signatures
+//
+//	func(context.Context, C) (R, error)
+//	func(context.Context, C) error
+//
+// for some C implementing Command, and returns C if so. The result-less form
+// dispatches as an Empty result.
 func matchesHandlerSig(mt reflect.Type) (reflect.Type, bool) {
-	if mt.NumIn() != 2 || mt.NumOut() != 2 {
+	if mt.NumIn() != 2 {
 		return nil, false
 	}
 	if mt.In(0) != ctxType {
@@ -143,7 +149,16 @@ func matchesHandlerSig(mt reflect.Type) (reflect.Type, bool) {
 	if !mt.In(1).Implements(commandType) {
 		return nil, false
 	}
-	if mt.Out(1) != errType {
+	switch mt.NumOut() {
+	case 1:
+		if mt.Out(0) != errType {
+			return nil, false
+		}
+	case 2:
+		if mt.Out(1) != errType {
+			return nil, false
+		}
+	default:
 		return nil, false
 	}
 	return mt.In(1), true
@@ -175,14 +190,19 @@ func (b *Bus) Dispatch(ctx context.Context, cmd Command) (any, error) {
 // or a func value), with the bus's middleware chain baked in
 // (outermost first).
 func (b *Bus) wrapReflected(callable reflect.Value) Next {
+	hasResult := callable.Type().NumOut() == 2
 	inner := Next(func(ctx context.Context, cmd Command) (any, error) {
 		out := callable.Call([]reflect.Value{
 			reflect.ValueOf(ctx),
 			reflect.ValueOf(cmd),
 		})
+		errVal := out[len(out)-1]
 		var err error
-		if !out[1].IsNil() {
-			err = out[1].Interface().(error)
+		if !errVal.IsNil() {
+			err = errVal.Interface().(error)
+		}
+		if !hasResult {
+			return Empty{}, err
 		}
 		return out[0].Interface(), err
 	})
