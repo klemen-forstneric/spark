@@ -110,6 +110,12 @@ type IdempotencyConfig struct {
 	// release their claim and can be retried with the same key. When
 	// false (default), all outcomes are cached (Stripe-style semantics).
 	CacheSuccessOnly bool
+
+	// QualifyByType, when true, appends ":" + cmd.Type() to a key sourced
+	// from the context (spark.WithIdempotencyKey). Keys sourced from a
+	// spark.Keyed command are used verbatim. Lets one context key (e.g. an
+	// event ID) disambiguate the multiple command types dispatched under it.
+	QualifyByType bool
 }
 
 // Idempotent returns a middleware that deduplicates command dispatches by
@@ -131,12 +137,15 @@ func Idempotent(cfg IdempotencyConfig) spark.Middleware {
 
 	return func(next spark.Next) spark.Next {
 		return func(ctx context.Context, cmd spark.Command) (any, error) {
-			key, ok := extractKey(ctx, cmd)
+			key, fromContext, ok := extractKey(ctx, cmd)
 			if !ok {
 				if cfg.RequireKey {
 					return nil, ErrMissingIdempotencyKey
 				}
 				return next(ctx, cmd)
+			}
+			if cfg.QualifyByType && fromContext {
+				key = key + ":" + cmd.Type()
 			}
 
 			var hash uint64
@@ -238,14 +247,14 @@ func unwrap(c Codec, v any) (any, error) {
 	return c.Unmarshal(data)
 }
 
-func extractKey(ctx context.Context, cmd spark.Command) (string, bool) {
+func extractKey(ctx context.Context, cmd spark.Command) (key string, fromContext bool, ok bool) {
 	if k, ok := spark.IdempotencyKeyFromContext(ctx); ok {
-		return k, true
+		return k, true, true
 	}
 	if keyed, ok := cmd.(spark.Keyed); ok {
 		if k := keyed.IdempotencyKey(); k != "" {
-			return k, true
+			return k, false, true
 		}
 	}
-	return "", false
+	return "", false, false
 }
