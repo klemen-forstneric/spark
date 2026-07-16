@@ -270,7 +270,7 @@ func (s *flakyService) Run(_ context.Context, _ Flaky) error {
 }
 
 func TestRetry(t *testing.T) {
-	bus := spark.NewBus(spark.WithMiddleware(middleware.Retry(5, time.Millisecond)))
+	bus := spark.NewBus(spark.WithMiddleware(middleware.Retry(middleware.RetryConfig{Attempts: 5, Backoff: time.Millisecond})))
 	svc := &flakyService{}
 	if err := bus.Register(svc); err != nil {
 		t.Fatalf("Register: %v", err)
