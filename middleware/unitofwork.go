@@ -13,13 +13,13 @@ type Transactor interface {
 	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-// UnitOfWork wraps each write command in a transaction. A command implementing
+// UnitOfWork wraps each write command in a transaction. A command embedding
 // spark.ReadOnly skips the transaction. The transaction-bound ctx flows to the
 // handler, so downstream repository writes join the same transaction.
 func UnitOfWork(t Transactor) spark.Middleware {
 	return func(next spark.Next) spark.Next {
 		return func(ctx context.Context, cmd spark.Command) (any, error) {
-			if _, ok := cmd.(spark.ReadOnly); ok {
+			if spark.IsReadOnly(cmd) {
 				return next(ctx, cmd)
 			}
 			var result any

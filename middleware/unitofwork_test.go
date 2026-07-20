@@ -31,10 +31,9 @@ type writeCmd struct{}
 
 func (writeCmd) Type() string { return "write" }
 
-type readCmd struct{}
+type readCmd struct{ spark.ReadOnly }
 
 func (readCmd) Type() string { return "read" }
-func (readCmd) ReadOnly()    {}
 
 type UnitOfWorkSuite struct {
 	suite.Suite
