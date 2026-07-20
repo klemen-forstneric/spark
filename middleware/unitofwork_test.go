@@ -31,9 +31,9 @@ type writeCmd struct{}
 
 func (writeCmd) Type() string { return "write" }
 
-type readCmd struct{ spark.ReadOnly }
+type nonAtomicCmd struct{ spark.NonAtomic }
 
-func (readCmd) Type() string { return "read" }
+func (nonAtomicCmd) Type() string { return "read" }
 
 type UnitOfWorkSuite struct {
 	suite.Suite
@@ -64,10 +64,10 @@ func (s *UnitOfWorkSuite) TestWriteCommandRunsInsideTransaction() {
 	s.tx.AssertExpectations(s.T())
 }
 
-func (s *UnitOfWorkSuite) TestReadOnlyCommandSkipsTransaction() {
+func (s *UnitOfWorkSuite) TestNonAtomicCommandSkipsTransaction() {
 	next := func(ctx context.Context, cmd spark.Command) (any, error) { return "ro", nil }
 
-	result, err := middleware.UnitOfWork(s.tx)(next)(context.Background(), readCmd{})
+	result, err := middleware.UnitOfWork(s.tx)(next)(context.Background(), nonAtomicCmd{})
 
 	s.Require().NoError(err)
 	s.Equal("ro", result)

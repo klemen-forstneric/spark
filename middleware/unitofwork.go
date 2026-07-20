@@ -15,12 +15,12 @@ type Transactor interface {
 }
 
 // UnitOfWork wraps each write command in a transaction. A command embedding
-// spark.ReadOnly skips the transaction. The transaction-bound ctx flows to the
+// spark.NonAtomic skips the transaction. The transaction-bound ctx flows to the
 // handler, so downstream repository writes join the same transaction.
 func UnitOfWork(t Transactor) spark.Middleware {
 	return func(next spark.Next) spark.Next {
 		return func(ctx context.Context, cmd spark.Command) (any, error) {
-			if spark.IsReadOnly(cmd) {
+			if spark.IsNonAtomic(cmd) {
 				return next(ctx, cmd)
 			}
 			var result any
