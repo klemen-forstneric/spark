@@ -7,8 +7,9 @@ import (
 )
 
 // Transactor runs fn inside a transaction, passing a context bound to that
-// transaction. The concrete impl lives in a driver package (spark/mongo),
-// mirroring how Idempotent depends on IdempotencyStore.
+// transaction. The concrete impl lives in a driver package
+// (spark/middleware/mongo), mirroring how Idempotent depends on
+// IdempotencyStore.
 type Transactor interface {
 	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
 }

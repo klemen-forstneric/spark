@@ -10,7 +10,7 @@ import (
 	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	sparkmongo "github.com/klemen-forstneric/spark/mongo"
+	sparkmongo "github.com/klemen-forstneric/spark/middleware/mongo"
 )
 
 type TransactorSuite struct {
