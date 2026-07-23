@@ -24,7 +24,15 @@ type Codec interface {
 // round-trip reconstruction. Build one with NewRegistry, listing every
 // concrete result type that may flow through the codec.
 type Registry struct {
-	types map[string]reflect.Type
+	types  map[string]reflect.Type
+	custom map[string]TypeCodec
+}
+
+// TypeCodec serializes one concrete result type. Register it on a Registry to
+// override the default reflection+json path for that type.
+type TypeCodec interface {
+	Marshal(v any) ([]byte, error)
+	Unmarshal(b []byte) (any, error)
 }
 
 // NewRegistry constructs a Registry containing the types of the given
@@ -32,7 +40,7 @@ type Registry struct {
 // honored at decode time, so passing &User{} registers User; both User
 // and *User can be round-tripped later.
 func NewRegistry(samples ...any) *Registry {
-	r := &Registry{types: map[string]reflect.Type{}}
+	r := &Registry{types: map[string]reflect.Type{}, custom: map[string]TypeCodec{}}
 	for _, s := range samples {
 		if s == nil {
 			continue
@@ -44,6 +52,16 @@ func NewRegistry(samples ...any) *Registry {
 		r.types[rt.String()] = rt
 	}
 	return r
+}
+
+// Register overrides serialization for sample's concrete type with c. The
+// pointer/value distinction is stripped: registering &T{} or T{} both key on T.
+func (r *Registry) Register(sample any, c TypeCodec) {
+	rt := reflect.TypeOf(sample)
+	if rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
+	}
+	r.custom[rt.String()] = c
 }
 
 // JSONCodec encodes values as JSON wrapped in a type envelope.
@@ -74,6 +92,13 @@ func (c *JSONCodec) Marshal(v any) ([]byte, error) {
 		rt = rt.Elem()
 		pointer = true
 	}
+	if tc, ok := c.registry.custom[rt.String()]; ok {
+		data, err := tc.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("spark/middleware: custom codec marshal: %w", err)
+		}
+		return json.Marshal(codecEnvelope{Type: rt.String(), Data: data})
+	}
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("spark/middleware: codec marshal value: %w", err)
@@ -95,6 +120,9 @@ func (c *JSONCodec) Unmarshal(data []byte) (any, error) {
 	}
 	if e.Type == "" {
 		return nil, nil
+	}
+	if tc, ok := c.registry.custom[e.Type]; ok {
+		return tc.Unmarshal(e.Data)
 	}
 	rt, ok := c.registry.types[e.Type]
 	if !ok {
