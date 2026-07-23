@@ -79,6 +79,23 @@ func TestJSONCodecRoundTripValue(t *testing.T) {
 	}
 }
 
+func TestJSONCodecOneRegistrationBothForms(t *testing.T) {
+	c := middleware.NewJSONCodec(middleware.NewRegistry(codecUser{}))
+
+	dv, err := c.Marshal(codecUser{ID: "v", Email: "a@b.c"})
+	require.NoError(t, err)
+	gv, err := c.Unmarshal(dv)
+	require.NoError(t, err)
+	require.Equal(t, codecUser{ID: "v", Email: "a@b.c"}, gv)
+
+	// Same registry, same registration — pointer form must also round-trip.
+	dp, err := c.Marshal(&codecUser{ID: "p", Email: "a@b.c"})
+	require.NoError(t, err)
+	gp, err := c.Unmarshal(dp)
+	require.NoError(t, err)
+	require.Equal(t, &codecUser{ID: "p", Email: "a@b.c"}, gp)
+}
+
 func TestJSONCodecNilRoundTrip(t *testing.T) {
 	c := middleware.NewJSONCodec(middleware.NewRegistry())
 	data, err := c.Marshal(nil)

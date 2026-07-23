@@ -12,33 +12,42 @@ type TypeCodec interface {
 	Unmarshal(b []byte) (any, error)
 }
 
-// JSONTypeCodec is the default TypeCodec: encodes the value as JSON, and
-// reconstructs its concrete value-or-pointer type via reflection on decode.
+// JSONTypeCodec is the default TypeCodec: encodes the value as JSON, tagging
+// each payload with the value's pointer-ness so one codec round-trips both a
+// type and a pointer to it.
 type JSONTypeCodec struct {
-	rt      reflect.Type
-	pointer bool
+	rt reflect.Type
 }
 
-// NewJSONTypeCodec builds a JSONTypeCodec for sample's type, reconstructing the
-// same value-or-pointer form as sample on decode.
+// NewJSONTypeCodec builds a JSONTypeCodec for sample's concrete type.
 func NewJSONTypeCodec(sample any) JSONTypeCodec {
 	rt := reflect.TypeOf(sample)
-	pointer := false
 	if rt.Kind() == reflect.Ptr {
 		rt = rt.Elem()
-		pointer = true
 	}
-	return JSONTypeCodec{rt: rt, pointer: pointer}
+	return JSONTypeCodec{rt: rt}
 }
 
-func (c JSONTypeCodec) Marshal(v any) ([]byte, error) { return json.Marshal(v) }
+func (c JSONTypeCodec) Marshal(v any) ([]byte, error) {
+	return json.Marshal(struct {
+		Pointer bool `json:"pointer,omitempty"`
+		Value   any  `json:"value"`
+	}{Pointer: reflect.TypeOf(v).Kind() == reflect.Ptr, Value: v})
+}
 
 func (c JSONTypeCodec) Unmarshal(b []byte) (any, error) {
-	ptr := reflect.New(c.rt)
-	if err := json.Unmarshal(b, ptr.Interface()); err != nil {
+	var p struct {
+		Pointer bool            `json:"pointer,omitempty"`
+		Value   json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(b, &p); err != nil {
 		return nil, err
 	}
-	if c.pointer {
+	ptr := reflect.New(c.rt)
+	if err := json.Unmarshal(p.Value, ptr.Interface()); err != nil {
+		return nil, err
+	}
+	if p.Pointer {
 		return ptr.Interface(), nil
 	}
 	return ptr.Elem().Interface(), nil
