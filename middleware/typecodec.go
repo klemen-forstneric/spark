@@ -29,25 +29,34 @@ func NewJSONTypeCodec(sample any) JSONTypeCodec {
 }
 
 func (c JSONTypeCodec) Marshal(v any) ([]byte, error) {
-	return json.Marshal(struct {
-		Pointer bool `json:"pointer,omitempty"`
-		Value   any  `json:"value"`
-	}{Pointer: reflect.TypeOf(v).Kind() == reflect.Ptr, Value: v})
+	ptr := reflect.TypeOf(v).Kind() == reflect.Ptr
+
+	payload := struct {
+		Pointer bool `json:"p,omitempty"`
+		Value   any  `json:"v"`
+	}{
+		Pointer: ptr,
+		Value:   v,
+	}
+
+	return json.Marshal(payload)
 }
 
 func (c JSONTypeCodec) Unmarshal(b []byte) (any, error) {
-	var p struct {
-		Pointer bool            `json:"pointer,omitempty"`
-		Value   json.RawMessage `json:"value"`
+	var payload struct {
+		Pointer bool            `json:"p"`
+		Value   json.RawMessage `json:"v"`
 	}
-	if err := json.Unmarshal(b, &p); err != nil {
+
+	if err := json.Unmarshal(b, &payload); err != nil {
 		return nil, err
 	}
+
 	ptr := reflect.New(c.rt)
-	if err := json.Unmarshal(p.Value, ptr.Interface()); err != nil {
+	if err := json.Unmarshal(payload.Value, ptr.Interface()); err != nil {
 		return nil, err
 	}
-	if p.Pointer {
+	if payload.Pointer {
 		return ptr.Interface(), nil
 	}
 	return ptr.Elem().Interface(), nil
