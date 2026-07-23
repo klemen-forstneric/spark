@@ -27,14 +27,14 @@ func NewRegistry(samples ...any) *Registry {
 // Register maps sample's concrete type to c. The pointer/value distinction is
 // stripped from the key: &T{} and T{} both key on T.
 func (r *Registry) Register(sample any, c TypeCodec) {
-	r.codecs[derefName(sample)] = c
+	r.codecs[r.key(sample)] = c
 }
 
 // marshaler resolves the codec for encoding v and its type name for the
 // envelope. Unregistered types fall back to a default JSONTypeCodec, so any
 // value can be encoded (though only registered types decode).
 func (r *Registry) marshaler(v any) (typeName string, tc TypeCodec) {
-	typeName = derefName(v)
+	typeName = r.key(v)
 	if c, ok := r.codecs[typeName]; ok {
 		return typeName, c
 	}
@@ -50,7 +50,8 @@ func (r *Registry) unmarshaler(typeName string) (TypeCodec, error) {
 	return nil, fmt.Errorf("%w: %s", ErrUnknownType, typeName)
 }
 
-func derefName(v any) string {
+// key is the map key for v's concrete type, pointer/value stripped.
+func (r *Registry) key(v any) string {
 	rt := reflect.TypeOf(v)
 	if rt.Kind() == reflect.Ptr {
 		rt = rt.Elem()
