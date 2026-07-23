@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 )
 
 // ErrUnknownType is returned by Codec.Unmarshal when the encoded value
@@ -37,38 +36,24 @@ type codecEnvelope struct {
 }
 
 // Marshal encodes v into a JSON envelope tagged with its Go type. A nil
-// value encodes as an empty envelope and round-trips back to nil.
+// value encodes as an empty envelope and round-trips back to nil. The payload
+// is produced by the Registry's codec for v's type; JSONCodec owns only the
+// envelope framing.
 func (c *JSONCodec) Marshal(v any) ([]byte, error) {
 	if v == nil {
 		return json.Marshal(codecEnvelope{})
 	}
-	rt := reflect.TypeOf(v)
-	pointer := false
-	if rt.Kind() == reflect.Ptr {
-		rt = rt.Elem()
-		pointer = true
-	}
-	if tc, ok := c.registry.custom[rt.String()]; ok {
-		data, err := tc.Marshal(v)
-		if err != nil {
-			return nil, fmt.Errorf("spark/middleware: custom codec marshal: %w", err)
-		}
-		return json.Marshal(codecEnvelope{Type: rt.String(), Data: data})
-	}
-	data, err := json.Marshal(v)
+	name, pointer, tc := c.registry.marshaler(v)
+	data, err := tc.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("spark/middleware: codec marshal value: %w", err)
 	}
-	return json.Marshal(codecEnvelope{
-		Type:    rt.String(),
-		Pointer: pointer,
-		Data:    data,
-	})
+	return json.Marshal(codecEnvelope{Type: name, Pointer: pointer, Data: data})
 }
 
 // Unmarshal decodes an envelope produced by Marshal back into the original
-// Go value (honouring the pointer-vs-value distinction). Returns
-// ErrUnknownType if the encoded type is not present in the Registry.
+// Go value. The payload is decoded by the Registry's codec for the tagged
+// type; returns ErrUnknownType if that type was never registered.
 func (c *JSONCodec) Unmarshal(data []byte) (any, error) {
 	var e codecEnvelope
 	if err := json.Unmarshal(data, &e); err != nil {
@@ -77,23 +62,13 @@ func (c *JSONCodec) Unmarshal(data []byte) (any, error) {
 	if e.Type == "" {
 		return nil, nil
 	}
-	if tc, ok := c.registry.custom[e.Type]; ok {
-		v, err := tc.Unmarshal(e.Data)
-		if err != nil {
-			return nil, fmt.Errorf("spark/middleware: custom codec unmarshal: %w", err)
-		}
-		return v, nil
+	tc, err := c.registry.unmarshaler(e.Type, e.Pointer)
+	if err != nil {
+		return nil, err
 	}
-	rt, ok := c.registry.types[e.Type]
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrUnknownType, e.Type)
-	}
-	ptr := reflect.New(rt)
-	if err := json.Unmarshal(e.Data, ptr.Interface()); err != nil {
+	v, err := tc.Unmarshal(e.Data)
+	if err != nil {
 		return nil, fmt.Errorf("spark/middleware: codec unmarshal value: %w", err)
 	}
-	if e.Pointer {
-		return ptr.Interface(), nil
-	}
-	return ptr.Elem().Interface(), nil
+	return v, nil
 }

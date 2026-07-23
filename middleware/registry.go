@@ -1,6 +1,10 @@
 package middleware
 
-import "reflect"
+import (
+	"encoding/json"
+	"fmt"
+	"reflect"
+)
 
 // TypeCodec serializes one concrete result type. Register it on a Registry to
 // override the default reflection+json path for that type.
@@ -44,4 +48,54 @@ func (r *Registry) Register(sample any, c TypeCodec) {
 		rt = rt.Elem()
 	}
 	r.custom[rt.String()] = c
+}
+
+// marshaler resolves the codec for encoding v — a registered TypeCodec, or the
+// default json codec bound to v's concrete type — and reports the type name and
+// pointer-ness for the envelope. Never fails: any type can be encoded.
+func (r *Registry) marshaler(v any) (typeName string, pointer bool, tc TypeCodec) {
+	rt := reflect.TypeOf(v)
+	if rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
+		pointer = true
+	}
+	typeName = rt.String()
+	if c, ok := r.custom[typeName]; ok {
+		return typeName, pointer, c
+	}
+	return typeName, pointer, jsonTypeCodec{rt: rt, pointer: pointer}
+}
+
+// unmarshaler resolves the codec for decoding a payload tagged typeName — a
+// registered TypeCodec, or the default json codec bound to the registered
+// sample type. ErrUnknownType if the type was never registered (its concrete
+// type is unknown, so it cannot be reconstructed).
+func (r *Registry) unmarshaler(typeName string, pointer bool) (TypeCodec, error) {
+	if c, ok := r.custom[typeName]; ok {
+		return c, nil
+	}
+	if rt, ok := r.types[typeName]; ok {
+		return jsonTypeCodec{rt: rt, pointer: pointer}, nil
+	}
+	return nil, fmt.Errorf("%w: %s", ErrUnknownType, typeName)
+}
+
+// jsonTypeCodec is the default TypeCodec: json for the payload, reconstructing
+// the concrete value-or-pointer type via reflection on decode.
+type jsonTypeCodec struct {
+	rt      reflect.Type
+	pointer bool
+}
+
+func (c jsonTypeCodec) Marshal(v any) ([]byte, error) { return json.Marshal(v) }
+
+func (c jsonTypeCodec) Unmarshal(b []byte) (any, error) {
+	ptr := reflect.New(c.rt)
+	if err := json.Unmarshal(b, ptr.Interface()); err != nil {
+		return nil, err
+	}
+	if c.pointer {
+		return ptr.Interface(), nil
+	}
+	return ptr.Elem().Interface(), nil
 }
