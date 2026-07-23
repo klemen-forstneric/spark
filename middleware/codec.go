@@ -30,9 +30,8 @@ func NewJSONCodec(r *Registry) *JSONCodec {
 }
 
 type codecEnvelope struct {
-	Type    string          `json:"type"`
-	Pointer bool            `json:"pointer,omitempty"`
-	Data    json.RawMessage `json:"data,omitempty"`
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data,omitempty"`
 }
 
 // Marshal encodes v into a JSON envelope tagged with its Go type. A nil
@@ -43,12 +42,12 @@ func (c *JSONCodec) Marshal(v any) ([]byte, error) {
 	if v == nil {
 		return json.Marshal(codecEnvelope{})
 	}
-	name, pointer, tc := c.registry.marshaler(v)
+	name, tc := c.registry.marshaler(v)
 	data, err := tc.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("spark/middleware: codec marshal value: %w", err)
 	}
-	return json.Marshal(codecEnvelope{Type: name, Pointer: pointer, Data: data})
+	return json.Marshal(codecEnvelope{Type: name, Data: data})
 }
 
 // Unmarshal decodes an envelope produced by Marshal back into the original
@@ -62,7 +61,7 @@ func (c *JSONCodec) Unmarshal(data []byte) (any, error) {
 	if e.Type == "" {
 		return nil, nil
 	}
-	tc, err := c.registry.unmarshaler(e.Type, e.Pointer)
+	tc, err := c.registry.unmarshaler(e.Type)
 	if err != nil {
 		return nil, err
 	}
