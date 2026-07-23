@@ -122,7 +122,11 @@ func (c *JSONCodec) Unmarshal(data []byte) (any, error) {
 		return nil, nil
 	}
 	if tc, ok := c.registry.custom[e.Type]; ok {
-		return tc.Unmarshal(e.Data)
+		v, err := tc.Unmarshal(e.Data)
+		if err != nil {
+			return nil, fmt.Errorf("spark/middleware: custom codec unmarshal: %w", err)
+		}
+		return v, nil
 	}
 	rt, ok := c.registry.types[e.Type]
 	if !ok {
