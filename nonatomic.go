@@ -1,7 +1,7 @@
 package spark
 
 // NonAtomic marks a command whose save+publish is NOT committed as one atomic
-// unit of work: UnitOfWork (see spark/middleware, via IsNonAtomic) skips the
+// unit of work: middleware.Atomic (see spark/middleware, via IsNonAtomic) skips the
 // transaction for it. Compose it like Result:
 //
 //	type GenerateReply struct {
@@ -12,7 +12,7 @@ package spark
 //
 // Use it for reads and for handlers that do external I/O or long-lived/streaming
 // calls that must not run inside a transaction. Default (not embedding NonAtomic)
-// is atomic (wrapped in the UnitOfWork transaction).
+// is atomic (wrapped in the Atomic transaction).
 type NonAtomic struct{}
 
 func (NonAtomic) isNonAtomic() {}

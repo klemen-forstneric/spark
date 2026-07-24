@@ -35,20 +35,20 @@ type nonAtomicCmd struct{ spark.NonAtomic }
 
 func (nonAtomicCmd) Type() string { return "read" }
 
-type UnitOfWorkSuite struct {
+type AtomicSuite struct {
 	suite.Suite
 	tx *mockTransactor
 }
 
-func TestUnitOfWorkSuite(t *testing.T) {
-	suite.Run(t, new(UnitOfWorkSuite))
+func TestAtomicSuite(t *testing.T) {
+	suite.Run(t, new(AtomicSuite))
 }
 
-func (s *UnitOfWorkSuite) SetupTest() {
+func (s *AtomicSuite) SetupTest() {
 	s.tx = &mockTransactor{}
 }
 
-func (s *UnitOfWorkSuite) TestWriteCommandRunsInsideTransaction() {
+func (s *AtomicSuite) TestWriteCommandRunsInsideTransaction() {
 	s.tx.On("WithinTx", mock.Anything).Return(nil).Once()
 	var handlerCtx context.Context
 	next := func(ctx context.Context, cmd spark.Command) (any, error) {
@@ -56,7 +56,7 @@ func (s *UnitOfWorkSuite) TestWriteCommandRunsInsideTransaction() {
 		return "ok", nil
 	}
 
-	result, err := middleware.UnitOfWork(s.tx)(next)(context.Background(), writeCmd{})
+	result, err := middleware.Atomic(s.tx)(next)(context.Background(), writeCmd{})
 
 	s.Require().NoError(err)
 	s.Equal("ok", result)
@@ -64,22 +64,22 @@ func (s *UnitOfWorkSuite) TestWriteCommandRunsInsideTransaction() {
 	s.tx.AssertExpectations(s.T())
 }
 
-func (s *UnitOfWorkSuite) TestNonAtomicCommandSkipsTransaction() {
+func (s *AtomicSuite) TestNonAtomicCommandSkipsTransaction() {
 	next := func(ctx context.Context, cmd spark.Command) (any, error) { return "ro", nil }
 
-	result, err := middleware.UnitOfWork(s.tx)(next)(context.Background(), nonAtomicCmd{})
+	result, err := middleware.Atomic(s.tx)(next)(context.Background(), nonAtomicCmd{})
 
 	s.Require().NoError(err)
 	s.Equal("ro", result)
 	s.tx.AssertNotCalled(s.T(), "WithinTx", mock.Anything)
 }
 
-func (s *UnitOfWorkSuite) TestHandlerErrorPropagates() {
+func (s *AtomicSuite) TestHandlerErrorPropagates() {
 	s.tx.On("WithinTx", mock.Anything).Return(nil).Once()
 	wantErr := errors.New("boom")
 	next := func(ctx context.Context, cmd spark.Command) (any, error) { return nil, wantErr }
 
-	_, err := middleware.UnitOfWork(s.tx)(next)(context.Background(), writeCmd{})
+	_, err := middleware.Atomic(s.tx)(next)(context.Background(), writeCmd{})
 
 	s.ErrorIs(err, wantErr)
 	s.tx.AssertExpectations(s.T())
