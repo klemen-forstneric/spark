@@ -3,7 +3,7 @@ package spark
 import "context"
 
 // Next is the type-erased function signature middleware receives and returns.
-// The result is opaque (any) at this layer; the outermost Bus.Send asserts it
+// The result is opaque (any) at this layer; the outermost Bus.Dispatch asserts it
 // back to the command's result type.
 type Next func(ctx context.Context, cmd Command) (any, error)
 

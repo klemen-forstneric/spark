@@ -15,7 +15,7 @@ var (
 	// not expose any method matching the handler signature.
 	ErrInvalidHandler = errors.New("spark: invalid handler")
 
-	// ErrResultType is returned by Bus.Send when the dispatched result is not
+	// ErrResultType is returned by Bus.Dispatch when the dispatched result is not
 	// the command's bound result type.
 	ErrResultType = errors.New("spark: unexpected result type")
 

@@ -12,7 +12,7 @@ type Command interface {
 
 // Result binds a command struct to its result type R. Embed it as a
 // zero-size field; it adds no bytes to the command and exposes the unexported
-// marker that Bus.Send uses to infer the result type.
+// marker that Bus.Dispatch uses to infer the result type.
 //
 //	type CreateUser struct {
 //	    spark.Result[*User]
@@ -32,7 +32,7 @@ func (Result[R]) resultType() R {
 type Empty = struct{}
 
 // typedCommand is the internal constraint binding a command to its result
-// type R, used by Bus.Send. It is unexported on purpose — the only way a user
+// type R, used by Bus.Dispatch. It is unexported on purpose — the only way a user
 // type satisfies it is by embedding Result[R], which prevents accidental
 // conformance.
 type typedCommand[R any] interface {

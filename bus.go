@@ -20,9 +20,9 @@ func NewBus(d Dispatcher) *Bus {
 	return &Bus{dispatcher: d}
 }
 
-// Send dispatches cmd and returns its result as the R bound by the command's
+// Dispatch sends cmd and returns its result as the R bound by the command's
 // embedded Result[R].
-func (b *Bus) Send[R any](ctx context.Context, cmd typedCommand[R]) (R, error) {
+func (b *Bus) Dispatch[R any](ctx context.Context, cmd typedCommand[R]) (R, error) {
 	var zero R
 	out, err := b.dispatcher.Dispatch(ctx, cmd)
 	if err != nil || out == nil {

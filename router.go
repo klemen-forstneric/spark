@@ -179,8 +179,7 @@ func commandKey(t reflect.Type) reflect.Type {
 }
 
 // Dispatch sends cmd to its registered handler and returns the handler's
-// result as an opaque any. Wrap the router in a Bus and call Send for a typed
-// result.
+// result as an opaque any. Wrap the router in a Bus for a typed result.
 //
 // Returns ErrHandlerNotFound if no handler is registered for cmd's runtime
 // type.
