@@ -37,7 +37,7 @@ func (b *Bus) Dispatch[R any](ctx context.Context, cmd ResultCommand[R]) (R, err
 
 // DispatchUntyped sends cmd and returns its result unchecked. Use it when the
 // result type is not known statically; prefer Dispatch otherwise.
-func (b *Bus) DispatchUntyped(ctx context.Context, cmd Command) (any, error) {
+func (b *Bus) DispatchUntyped(ctx context.Context, cmd UntypedCommand) (any, error) {
 	return b.dispatcher.Dispatch(ctx, cmd)
 }
 

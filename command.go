@@ -10,6 +10,11 @@ type Command interface {
 	Type() string
 }
 
+// UntypedCommand is a Command whose result type is not checked at the call
+// site, the counterpart of ResultCommand. It does not mean the command has no
+// result: every command is an UntypedCommand.
+type UntypedCommand = Command
+
 // Result binds a command struct to its result type R. Embed it as a
 // zero-size field; it adds no bytes to the command and exposes the unexported
 // marker that Bus.Dispatch uses to infer the result type.

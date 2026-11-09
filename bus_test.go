@@ -99,7 +99,7 @@ func (s *BusSuite) TestDispatchInfersFromResultCommand() {
 }
 
 func (s *BusSuite) TestDispatchUntypedReturnsRawResult() {
-	var cmd spark.Command = CreateUser{Email: "a@b.c"}
+	var cmd spark.UntypedCommand = CreateUser{Email: "a@b.c"}
 	want := User{ID: "u1"}
 	s.dispatcher.On("Dispatch", s.ctx, cmd).Return(want, nil).Once()
 
