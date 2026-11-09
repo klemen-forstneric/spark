@@ -15,6 +15,10 @@ var (
 	// not expose any method matching the handler signature.
 	ErrInvalidHandler = errors.New("spark: invalid handler")
 
+	// ErrResultType is returned by Bus.Send when the dispatched result is not
+	// the command's bound result type.
+	ErrResultType = errors.New("spark: unexpected result type")
+
 	// ErrStale signals that a command operated on a stale view of its entity —
 	// the underlying state moved between load and save, detected by the
 	// repository or event store as a version/ETag/CAS mismatch.
