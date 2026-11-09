@@ -31,11 +31,15 @@ func (Result[R]) resultType() R {
 // Empty is the result type for commands that do not return a value.
 type Empty = struct{}
 
-// typedCommand is the internal constraint binding a command to its result
-// type R, used by Bus.Dispatch. It is unexported on purpose — the only way a user
-// type satisfies it is by embedding Result[R], which prevents accidental
-// conformance.
-type typedCommand[R any] interface {
+// ResultCommand is a command whose result type is R. A type satisfies it only
+// by embedding Result[R], which prevents accidental conformance. Declare a
+// variable as ResultCommand[R] to hold any of several commands that share a
+// result type; Bus.Dispatch still infers R from it.
+//
+//	var cmd spark.ResultCommand[*Order]
+//	switch ... { case ...: cmd = &CompleteOrder{...}; case ...: cmd = &FailOrder{...} }
+//	order, err := bus.Dispatch(ctx, cmd)
+type ResultCommand[R any] interface {
 	Command
 	resultType() R
 }

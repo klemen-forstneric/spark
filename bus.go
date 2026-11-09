@@ -22,7 +22,7 @@ func NewBus(d Dispatcher) *Bus {
 
 // Dispatch sends cmd and returns its result as the R bound by the command's
 // embedded Result[R].
-func (b *Bus) Dispatch[R any](ctx context.Context, cmd typedCommand[R]) (R, error) {
+func (b *Bus) Dispatch[R any](ctx context.Context, cmd ResultCommand[R]) (R, error) {
 	var zero R
 	out, err := b.dispatcher.Dispatch(ctx, cmd)
 	if err != nil || out == nil {
@@ -33,4 +33,16 @@ func (b *Bus) Dispatch[R any](ctx context.Context, cmd typedCommand[R]) (R, erro
 		return zero, fmt.Errorf("%w: %s returned %T, want %T", ErrResultType, cmd.Type(), out, zero)
 	}
 	return r, nil
+}
+
+// DispatchUntyped sends cmd and returns its result unchecked. Use it when the
+// result type is not known statically; prefer Dispatch otherwise.
+func (b *Bus) DispatchUntyped(ctx context.Context, cmd Command) (any, error) {
+	return b.dispatcher.Dispatch(ctx, cmd)
+}
+
+// Notify sends cmd and discards its result.
+func (b *Bus) Notify(ctx context.Context, cmd Command) error {
+	_, err := b.dispatcher.Dispatch(ctx, cmd)
+	return err
 }

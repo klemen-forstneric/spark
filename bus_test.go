@@ -87,6 +87,53 @@ func (s *BusSuite) TestDispatchRejectsWrongResultType() {
 	s.Nil(got)
 }
 
+func (s *BusSuite) TestDispatchInfersFromResultCommand() {
+	var cmd spark.ResultCommand[*User] = &UpdateUser{ID: "u2", Email: "x@y.z"}
+	want := &User{ID: "u2"}
+	s.dispatcher.On("Dispatch", s.ctx, cmd).Return(want, nil).Once()
+
+	got, err := s.bus.Dispatch(s.ctx, cmd)
+
+	s.Require().NoError(err)
+	s.Same(want, got)
+}
+
+func (s *BusSuite) TestDispatchUntypedReturnsRawResult() {
+	var cmd spark.Command = CreateUser{Email: "a@b.c"}
+	want := User{ID: "u1"}
+	s.dispatcher.On("Dispatch", s.ctx, cmd).Return(want, nil).Once()
+
+	got, err := s.bus.DispatchUntyped(s.ctx, cmd)
+
+	s.Require().NoError(err)
+	s.Equal(want, got)
+}
+
+func (s *BusSuite) TestDispatchUntypedReturnsDispatchError() {
+	cmd := CreateUser{Email: "a@b.c"}
+	boom := errors.New("boom")
+	s.dispatcher.On("Dispatch", s.ctx, cmd).Return(nil, boom).Once()
+
+	_, err := s.bus.DispatchUntyped(s.ctx, cmd)
+
+	s.Require().ErrorIs(err, boom)
+}
+
+func (s *BusSuite) TestNotifyDiscardsResult() {
+	var cmd spark.Command = CreateUser{Email: "a@b.c"}
+	s.dispatcher.On("Dispatch", s.ctx, cmd).Return(&User{ID: "u1"}, nil).Once()
+
+	s.Require().NoError(s.bus.Notify(s.ctx, cmd))
+}
+
+func (s *BusSuite) TestNotifyReturnsDispatchError() {
+	cmd := DeleteUser{ID: "u1"}
+	boom := errors.New("boom")
+	s.dispatcher.On("Dispatch", s.ctx, cmd).Return(nil, boom).Once()
+
+	s.Require().ErrorIs(s.bus.Notify(s.ctx, cmd), boom)
+}
+
 func (s *BusSuite) TestDispatchThroughRouter() {
 	router := spark.NewRouter()
 	s.Require().NoError(router.Register(&userService{}))
